@@ -60,6 +60,27 @@ _SKLEARN_WEIGHT_REGISTRY = {
     'MiniBatchKMeans':             {'weights': ['cluster_centers_']},
 }
 
+# sklearn.metrics functions that require probability estimates
+# (predict_proba output) rather than hard class predictions (predict output).
+# This mirrors how pyt.py differentiates loss function input types, adapted
+# for sklearn where the same sklearn.metrics module serves both loss and
+# metric functions.
+_PROBA_METRICS = frozenset({
+    'log_loss',
+    'roc_auc_score',
+    'brier_score_loss',
+    'average_precision_score',
+})
+
+# Subset of _PROBA_METRICS where binary classification requires only
+# positive-class probabilities (a 1-D array from predict_proba()[:, 1])
+# instead of the full (n_samples, n_classes) probability matrix.
+_BINARY_POS_CLASS_METRICS = frozenset({
+    'roc_auc_score',
+    'brier_score_loss',
+    'average_precision_score',
+})
+
 
 class SwarmCallback(SwarmCallbackBase):
     '''
@@ -250,8 +271,7 @@ class SwarmCallback(SwarmCallbackBase):
                 )
 
         # --- Context ---
-        self.mlCtx = SwarmCallback._SklearnContext(self.model)
-        self.logger.debug("Initialized Scikit-Learn context for Swarm")
+        self.__setMLContext(model=self.model)
 
         # hfMode is not applicable for Scikit-Learn
         self.hfMode = None
@@ -306,9 +326,25 @@ class SwarmCallback(SwarmCallbackBase):
 
         Injects merged weights back into the model by overwriting
         the appropriate attributes using setattr().
+
+        Before setting any attribute, this method validates:
+          1. All expected weight keys are present in the merged dict.
+          2. Array shapes match between local and merged weights.
+          3. No NaN or Inf values exist in the merged weights.
+        These checks prevent silent model corruption that would
+        otherwise go undetected because setattr() does not validate.
         '''
         model = self.mlCtx.model
         is_list = self._weightConfig.get('is_list', False)
+
+        # --- Validate all expected keys are present ---
+        for key in self.weightNames:
+            if key not in paramsDict:
+                self._logAndRaiseError(
+                    "[WeightValidation] Missing key '%s' in merged weights. "
+                    "Expected keys: %s, Received keys: %s"
+                    % (key, self.weightNames, list(paramsDict.keys()))
+                )
 
         if is_list:
             for attr in self._weightConfig['weights']:
@@ -317,11 +353,66 @@ class SwarmCallback(SwarmCallbackBase):
                     [k for k in self.weightNames if k.startswith(attr + '_')],
                     key=lambda x: int(x.rsplit('_', 1)[-1])
                 )
-                reconstructed = [paramsDict[k] for k in keys]
+
+                # Validate list length matches current model
+                local_val = getattr(model, attr, None)
+                if local_val is not None and isinstance(local_val, list):
+                    if len(keys) != len(local_val):
+                        self._logAndRaiseError(
+                            "[WeightValidation] Layer count mismatch for '%s': "
+                            "local model has %d arrays, merged has %d"
+                            % (attr, len(local_val), len(keys))
+                        )
+
+                reconstructed = []
+                for i, k in enumerate(keys):
+                    merged_arr = np.array(paramsDict[k])
+
+                    # Shape validation against local model
+                    if (local_val is not None
+                            and isinstance(local_val, list)
+                            and i < len(local_val)):
+                        local_shape = np.array(local_val[i]).shape
+                        if merged_arr.shape != local_shape:
+                            self._logAndRaiseError(
+                                "[WeightValidation] Shape mismatch for '%s': "
+                                "local=%s, merged=%s"
+                                % (k, local_shape, merged_arr.shape)
+                            )
+
+                    # NaN / Inf validation
+                    if np.any(np.isnan(merged_arr)) or np.any(np.isinf(merged_arr)):
+                        self._logAndRaiseError(
+                            "[WeightValidation] NaN or Inf detected in "
+                            "merged weight '%s'" % k
+                        )
+
+                    reconstructed.append(merged_arr)
+
                 setattr(model, attr, reconstructed)
         else:
             for attr in self._weightConfig['weights']:
-                setattr(model, attr, paramsDict[attr])
+                merged_arr = np.array(paramsDict[attr])
+
+                # Shape validation against local model
+                local_val = getattr(model, attr, None)
+                if local_val is not None:
+                    local_shape = np.array(local_val).shape
+                    if merged_arr.shape != local_shape:
+                        self._logAndRaiseError(
+                            "[WeightValidation] Shape mismatch for '%s': "
+                            "local=%s, merged=%s"
+                            % (attr, local_shape, merged_arr.shape)
+                        )
+
+                # NaN / Inf validation
+                if np.any(np.isnan(merged_arr)) or np.any(np.isinf(merged_arr)):
+                    self._logAndRaiseError(
+                        "[WeightValidation] NaN or Inf detected in "
+                        "merged weight '%s'" % attr
+                    )
+
+                setattr(model, attr, merged_arr)
 
 
     def _calculateLocalLossAndMetrics(self):
@@ -329,9 +420,120 @@ class SwarmCallback(SwarmCallbackBase):
         Scikit-Learn specific implementation of abstract method
         _calculateLocalLossAndMetrics in SwarmCallbackBase class.
 
-        TODO: Implement loss and metrics computation using
-        sklearn.metrics functions. Not needed for on_train_begin().
+        Computes local loss and metrics using the validation data
+        (self.valX, self.valY) and user-supplied sklearn.metrics
+        function names (self.lossFunction, self.metricFunction).
+
+        lossFunction and metricFunction strings should match function
+        names defined in sklearn.metrics, for example:
+          lossFunction='log_loss'        -> sklearn.metrics.log_loss
+          metricFunction='roc_auc_score' -> sklearn.metrics.roc_auc_score
+
+        Functions listed in _PROBA_METRICS are evaluated using
+        predict_proba() output; all others use predict() output.
+        This mirrors how pyt.py dynamically constructs callable
+        functions from user-supplied string names.
         '''
         valLoss = 0
         totalMetrics = 0
-        return valLoss, totalMetrics
+        model = self.mlCtx.model
+
+        if self.valX is None or self.valY is None:
+            return valLoss, totalMetrics
+
+        try:
+            # --- Obtain predictions ---
+            # Always compute hard predictions; additionally attempt
+            # probability estimates for metrics that need them.
+            y_pred = model.predict(self.valX)
+
+            y_proba = None
+            if hasattr(model, 'predict_proba'):
+                try:
+                    y_proba = model.predict_proba(self.valX)
+                except Exception:
+                    self.logger.debug(
+                        "predict_proba unavailable; falling back to "
+                        "predict for probability metrics"
+                    )
+
+            # --- Loss computation ---
+            # requested lossFunction string should match with function
+            # defined in sklearn.metrics
+            # https://scikit-learn.org/stable/modules/model_evaluation.html
+            # Logic is to construct callable loss function using the
+            # passed-in lossFunction string (same pattern as pyt.py).
+            if self.lossFunction is not None:
+                lossFn = getattr(skmetrics, self.lossFunction, None)
+                if lossFn is None:
+                    self.logger.warning(
+                        "lossFunction '%s' not found in sklearn.metrics"
+                        % self.lossFunction
+                    )
+                else:
+                    if (self.lossFunction in _PROBA_METRICS
+                            and y_proba is not None):
+                        valLoss = lossFn(self.valY, y_proba)
+                    else:
+                        valLoss = lossFn(self.valY, y_pred)
+                    self.logger.debug(
+                        "Local loss (%s) on valData: %s"
+                        % (self.lossFunction, valLoss)
+                    )
+
+            # --- Metric computation ---
+            # requested metricFunction string should match with function
+            # defined in sklearn.metrics
+            # https://scikit-learn.org/stable/modules/model_evaluation.html
+            if self.metricFunction is not None:
+                metricFn = getattr(skmetrics, self.metricFunction, None)
+                if metricFn is None:
+                    self.logger.warning(
+                        "metricFunction '%s' not found in sklearn.metrics"
+                        % self.metricFunction
+                    )
+                else:
+                    metricArgs = self.metricFunctionArgs or {}
+                    if (self.metricFunction in _PROBA_METRICS
+                            and y_proba is not None):
+                        # Binary classifiers: metrics like roc_auc_score
+                        # and brier_score_loss expect a 1-D array of
+                        # positive-class probabilities, not the full
+                        # (n_samples, n_classes) matrix.
+                        if (self.metricFunction in _BINARY_POS_CLASS_METRICS
+                                and y_proba.ndim == 2
+                                and y_proba.shape[1] == 2):
+                            y_score = y_proba[:, 1]
+                        else:
+                            y_score = y_proba
+                        totalMetrics = metricFn(
+                            self.valY, y_score, **metricArgs
+                        )
+                    else:
+                        totalMetrics = metricFn(
+                            self.valY, y_pred, **metricArgs
+                        )
+                    self.logger.debug(
+                        "Local metric (%s) on valData: %s"
+                        % (self.metricFunction, totalMetrics)
+                    )
+
+        except Exception as emsg:
+            self._logAndRaiseError(
+                "Exception in method sklearn.py:"
+                "_calculateLocalLossAndMetrics, "
+                "error message - %s" % emsg
+            )
+
+        return float(valLoss), float(totalMetrics)
+
+
+    def __setMLContext(self, **params):
+        '''
+        Scikit-Learn specific context initializer.
+        Mirrors the __setMLContext pattern used in pyt.py, tf.py,
+        and hf_transformers.py for consistency across platforms.
+        '''
+        ctx = SwarmCallback._SklearnContext(params['model'])
+        self.logger.debug("Initialized Scikit-Learn context for Swarm")
+        self.mlCtx = ctx

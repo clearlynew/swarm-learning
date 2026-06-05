@@ -277,6 +277,10 @@ class SwarmCallback(SwarmCallbackBase):
         self.hfMode = None
 
 
+    # Note: This adaptive sync implementation is provided to fulfill the abstract
+    # requirements of the SwarmCallbackBase class and maintain interface consistency
+    # with other framework wrappers. Its functionality with Scikit-Learn has not yet
+    # been formally tested.
     def _getValidationDataForAdaptiveSync(self, valData, valBatchSize):
         '''
         Scikit-Learn specific implementation of abstract method

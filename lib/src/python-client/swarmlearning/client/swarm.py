@@ -50,6 +50,7 @@ class SLPlatforms(IntEnum):
     KERAS = 2
     PYTORCH = 3
     HF_TRANSFORMER = 4
+    SKLEARN = 5
     
 # Merge Methods supported in SL framework
 class SLMergeMethod(IntEnum):

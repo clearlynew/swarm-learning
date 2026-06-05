@@ -1,0 +1,22 @@
+######################################################################
+# (C)Copyright 2021,2022 Hewlett Packard Enterprise Development LP
+######################################################################
+Name: user_env_skl_build_task
+TaskType: MAKE_USER_CONTAINER
+Author: HPESwarm
+Prereq: ROOTTASK
+Outcome: user-env-skl-swop
+Body:
+    BuildContext: sl-cli-lib
+    BuildType: INLINE
+    BuildSteps:
+    - FROM python@sha256:dad5b29e3506c35e0fd222736f4d4ef25d21b219acdd73f7bb41d59996ca8e0d
+    - ' '
+    - RUN pip3 install --upgrade pip && pip3 install \
+    - '   scikit-learn "numpy<2.0.0" pandas joblib protobuf==3.15.6 '
+    - ' '
+    - RUN pip3 install pip==23.3.2
+    - RUN mkdir -p /tmp/hpe-swarmcli-pkg
+    - COPY swarmlearning-client-py3-none-manylinux_2_24_x86_64.whl /tmp/hpe-swarmcli-pkg/swarmlearning-client-py3-none-manylinux_2_24_x86_64.whl
+    - RUN pip3 install /tmp/hpe-swarmcli-pkg/swarmlearning-client-py3-none-manylinux_2_24_x86_64.whl
+

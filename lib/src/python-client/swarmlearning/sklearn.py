@@ -53,8 +53,6 @@ _SKLEARN_WEIGHT_REGISTRY = {
     'SGDClassifier':               {'weights': ['coef_', 'intercept_']},
     'SGDRegressor':                {'weights': ['coef_', 'intercept_']},
     'Perceptron':                  {'weights': ['coef_', 'intercept_']},
-    'PassiveAggressiveClassifier': {'weights': ['coef_', 'intercept_']},
-    'PassiveAggressiveRegressor':  {'weights': ['coef_', 'intercept_']},
     'MLPClassifier':               {'weights': ['coefs_', 'intercepts_'], 'is_list': True},
     'MLPRegressor':                {'weights': ['coefs_', 'intercepts_'], 'is_list': True},
     'MiniBatchKMeans':             {'weights': ['cluster_centers_']},
@@ -66,6 +64,7 @@ _SKLEARN_WEIGHT_REGISTRY = {
 # for sklearn where the same sklearn.metrics module serves both loss and
 # metric functions.
 _PROBA_METRICS = frozenset({
+    'accuracy_score',
     'log_loss',
     'roc_auc_score',
     'brier_score_loss',
@@ -233,30 +232,9 @@ class SwarmCallback(SwarmCallbackBase):
         if self.model is None:
             self._logAndRaiseError("Scikit-Learn model is None")
 
-        # --- Lazy weight initialization ---
-        # Check if the model already has fitted weight attributes
-        has_weights = any(
-            hasattr(self.model, attr)
-            for attr in ['coef_', 'coefs_', 'cluster_centers_']
-        )
-        if not has_weights:
-            initData = params.get('initData', None)
-            classes = params.get('classes', None)
-            if initData is None:
-                self._logAndRaiseError(
-                    "Model weights are not initialized. "
-                    "Provide 'initData=(X_sample, y_sample)' so a dummy "
-                    "partial_fit() can allocate them before the first sync."
-                )
-            X_init, y_init = initData
-            self.logger.info("Running dummy partial_fit() to allocate model weights ...")
-            if classes is not None:
-                self.model.partial_fit(X_init, y_init, classes=classes)
-            else:
-                self.model.partial_fit(X_init, y_init)
-            self.logger.info("Dummy partial_fit() completed. Weights allocated.")
-
         # --- Weight config lookup ---
+        # Resolve weight configuration BEFORE checking has_weights so
+        # custom models registered via weight_attrs are detected correctly.
         model_name = type(self.model).__name__
         self._weightConfig = _SKLEARN_WEIGHT_REGISTRY.get(model_name, None)
         if self._weightConfig is None:
@@ -269,6 +247,33 @@ class SwarmCallback(SwarmCallbackBase):
                     "Model '%s' not found in weight registry and no "
                     "'weight_attrs' provided." % model_name
                 )
+
+        # --- Lazy weight initialization ---
+        # Check if the model already has fitted weight attributes
+        # using the resolved weight config (supports both built-in
+        # and custom models).
+        has_weights = any(
+            hasattr(self.model, attr)
+            for attr in self._weightConfig['weights']
+        )
+        if not has_weights:
+            initData = params.get('initData', None)
+            classes = params.get('classes', None)
+            if initData is None:
+                self._logAndRaiseError(
+                    "Model weights are not initialized. "
+                    "Provide 'initData=(X_sample, y_sample)' so a dummy "
+                    "partial_fit() can allocate them before the first sync."
+                )
+            if not (isinstance(initData, tuple) and len(initData) == 2):
+                self._logAndRaiseError("'initData' must be a (X, y) tuple.")
+            X_init, y_init = initData
+            self.logger.info("Running dummy partial_fit() to allocate model weights ...")
+            if classes is not None:
+                self.model.partial_fit(X_init, y_init, classes=classes)
+            else:
+                self.model.partial_fit(X_init, y_init)
+            self.logger.info("Dummy partial_fit() completed. Weights allocated.")
 
         # --- Context ---
         self.__setMLContext(model=self.model)

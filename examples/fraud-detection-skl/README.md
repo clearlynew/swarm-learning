@@ -1,7 +1,7 @@
-Credit card fraud detection
-===========================
+Credit card fraud detection (Scikit-Learn)
+==========================================
 
-This example runs a Credit Card Fraud Detection algorithm [1] on the Swarm Learning platform. It uses Keras and Tensorflow.
+This example runs a Credit Card Fraud Detection algorithm [1] on the Swarm Learning platform using Scikit-Learn.
 
 This example uses a subset of the data from [1] for each node. These subset datasets are biased with respect to the class and the volume of data.
 This example uses four training batches and one test batch. These files are located in the respective `examples/
@@ -9,7 +9,14 @@ fraud-detection/data-and-scratch<n>` directories.
 >  **_NOTE :_** Refer [Data license](/examples/fraud-detection/Data_license.md/) associated with this dataset. 
 
 
-The ML program, after conversion to Swarm Learning, is in `examples/fraud-detection/model` and is called `fraud-detection.py`.
+The `model/` directory contains two ML programs that can be used interchangeably:
+
+| Script | Description |
+|--------|-------------|
+| `fraud-detection-SGD.py` | **(Default)** Uses `sklearn.linear_model.SGDClassifier` — a built-in model registered in the Swarm weight registry. |
+| `fraud-detection-custom.py` | Uses a custom `OnlineLogisticRegression` model with non-standard weight attributes (`theta_`, `bias_`). Demonstrates the `weight_attrs` feature of `SwarmCallback` for models not in the built-in registry. |
+
+To switch between models, edit the `Command` field in `swci/taskdefs/swarm_fd_task.yaml`.
 
 This example shows the Swarm training of Credit Card Fraud Detection model using four Machine Learning (ML) nodes. Machine Learning nodes along with Swarm Learning (SL) nodes are automatically spawned by Swarm Operators (SWOP) nodes - all running on single host. Swarm training gets initiated by Swarm Command Interface (SWCI) node and orchestrated by one Swarm Network (SN) nodes running on the same host. This example also shows how private data, private scratch area and shared model can be mounted to Machine Learning nodes for Swarm training. For details, see the profile files and task definition files placed under `examples/fraud-detection/swop` and `examples/fraud-detection/swci` folders respectively.
 

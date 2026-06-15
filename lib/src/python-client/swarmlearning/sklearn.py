@@ -283,6 +283,10 @@ class SwarmCallback(SwarmCallbackBase):
         self.hfMode = None
 
 
+    # Note: This adaptive sync implementation is provided to fulfill the abstract
+    # requirements of the SwarmCallbackBase class and maintain interface consistency
+    # with other framework wrappers. Its functionality with Scikit-Learn has not yet
+    # been formally tested.
     def _getValidationDataForAdaptiveSync(self, valData, valBatchSize):
         '''
         Scikit-Learn specific implementation of abstract method
@@ -291,8 +295,16 @@ class SwarmCallback(SwarmCallbackBase):
         For Scikit-Learn we only support (X, Y) tuple validation data.
         '''
         valGen = valSteps = valX = valY = valSampleWeight = None
-        if valData is not None and isinstance(valData, tuple) and len(valData) == 2:
-            valX, valY = valData
+        if valData is not None and isinstance(valData, tuple):
+            if len(valData) == 2:
+                valX, valY = valData
+            else:
+                self.logger.warning(
+                    "valData tuple has length %d (expected 2). "
+                    "Only (X, y) 2-tuples are supported; if a 3-tuple was passed, "
+                    "it may be (X, y, sample_weight) — sample_weight is not used "
+                    "for Scikit-Learn metric computation. valData will be ignored." % len(valData)
+                )
         return valGen, valSteps, valX, valY, valSampleWeight
 
 
@@ -527,12 +539,12 @@ class SwarmCallback(SwarmCallbackBase):
                         % (self.metricFunction, totalMetrics)
                     )
 
-        except Exception as emsg:
-            self._logAndRaiseError(
-                "Exception in method sklearn.py:"
-                "_calculateLocalLossAndMetrics, "
-                "error message - %s" % emsg
+        except Exception as exc:
+            self.logger.warning(
+                "Exception in _calculateLocalLossAndMetrics: %s. "
+                "Returning (0, 0) to allow training to continue." % exc
             )
+            return 0, 0
 
         return float(valLoss), float(totalMetrics)
 
@@ -571,7 +583,11 @@ class SwarmSklearnTrainer:
                 y_batch = y_shuffled[start:end]
 
                 model = self.swarmCallback.mlCtx.model
-                if classes is not None:
+                # Pass classes only on the very first partial_fit() call
+                # (epoch 0, first batch). Scikit-Learn classifiers only need
+                # the full label set once to allocate their internal arrays;
+                # repeating it every batch is wasteful for large label sets.
+                if classes is not None and epoch == 0 and start == 0:
                     model.partial_fit(x_batch, y_batch, classes=classes)
                 else:
                     model.partial_fit(x_batch, y_batch)

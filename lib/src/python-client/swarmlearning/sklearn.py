@@ -53,8 +53,6 @@ _SKLEARN_WEIGHT_REGISTRY = {
     'SGDClassifier':               {'weights': ['coef_', 'intercept_']},
     'SGDRegressor':                {'weights': ['coef_', 'intercept_']},
     'Perceptron':                  {'weights': ['coef_', 'intercept_']},
-    'PassiveAggressiveClassifier': {'weights': ['coef_', 'intercept_']},
-    'PassiveAggressiveRegressor':  {'weights': ['coef_', 'intercept_']},
     'MLPClassifier':               {'weights': ['coefs_', 'intercepts_'], 'is_list': True},
     'MLPRegressor':                {'weights': ['coefs_', 'intercepts_'], 'is_list': True},
     'MiniBatchKMeans':             {'weights': ['cluster_centers_']},
@@ -66,6 +64,7 @@ _SKLEARN_WEIGHT_REGISTRY = {
 # for sklearn where the same sklearn.metrics module serves both loss and
 # metric functions.
 _PROBA_METRICS = frozenset({
+    'accuracy_score',
     'log_loss',
     'roc_auc_score',
     'brier_score_loss',
@@ -233,11 +232,30 @@ class SwarmCallback(SwarmCallbackBase):
         if self.model is None:
             self._logAndRaiseError("Scikit-Learn model is None")
 
+        # --- Weight config lookup ---
+        # Resolve weight configuration BEFORE checking has_weights so
+        # custom models registered via weight_attrs are detected correctly.
+        model_name = type(self.model).__name__
+        self._weightConfig = _SKLEARN_WEIGHT_REGISTRY.get(model_name, None)
+        if self._weightConfig is None:
+            # Allow user-supplied custom attribute list
+            custom_attrs = params.get('weight_attrs', None)
+            if custom_attrs:
+                is_list = params.get('weight_attrs_is_list', False)
+                self._weightConfig = {'weights': custom_attrs, 'is_list': is_list}
+            else:
+                self._logAndRaiseError(
+                    "Model '%s' not found in weight registry and no "
+                    "'weight_attrs' provided." % model_name
+                )
+
         # --- Lazy weight initialization ---
         # Check if the model already has fitted weight attributes
+        # using the resolved weight config (supports both built-in
+        # and custom models).
         has_weights = any(
             hasattr(self.model, attr)
-            for attr in ['coef_', 'coefs_', 'cluster_centers_']
+            for attr in self._weightConfig['weights']
         )
         if not has_weights:
             initData = params.get('initData', None)
@@ -248,6 +266,8 @@ class SwarmCallback(SwarmCallbackBase):
                     "Provide 'initData=(X_sample, y_sample)' so a dummy "
                     "partial_fit() can allocate them before the first sync."
                 )
+            if not (isinstance(initData, tuple) and len(initData) == 2):
+                self._logAndRaiseError("'initData' must be a (X, y) tuple.")
             X_init, y_init = initData
             self.logger.info("Running dummy partial_fit() to allocate model weights ...")
             if classes is not None:
@@ -255,20 +275,6 @@ class SwarmCallback(SwarmCallbackBase):
             else:
                 self.model.partial_fit(X_init, y_init)
             self.logger.info("Dummy partial_fit() completed. Weights allocated.")
-
-        # --- Weight config lookup ---
-        model_name = type(self.model).__name__
-        self._weightConfig = _SKLEARN_WEIGHT_REGISTRY.get(model_name, None)
-        if self._weightConfig is None:
-            # Allow user-supplied custom attribute list
-            custom_attrs = params.get('weight_attrs', None)
-            if custom_attrs:
-                self._weightConfig = {'weights': custom_attrs}
-            else:
-                self._logAndRaiseError(
-                    "Model '%s' not found in weight registry and no "
-                    "'weight_attrs' provided." % model_name
-                )
 
         # --- Context ---
         self.__setMLContext(model=self.model)
@@ -289,8 +295,16 @@ class SwarmCallback(SwarmCallbackBase):
         For Scikit-Learn we only support (X, Y) tuple validation data.
         '''
         valGen = valSteps = valX = valY = valSampleWeight = None
-        if valData is not None and isinstance(valData, tuple) and len(valData) == 2:
-            valX, valY = valData
+        if valData is not None and isinstance(valData, tuple):
+            if len(valData) == 2:
+                valX, valY = valData
+            else:
+                self.logger.warning(
+                    "valData tuple has length %d (expected 2). "
+                    "Only (X, y) 2-tuples are supported; if a 3-tuple was passed, "
+                    "it may be (X, y, sample_weight) — sample_weight is not used "
+                    "for Scikit-Learn metric computation. valData will be ignored." % len(valData)
+                )
         return valGen, valSteps, valX, valY, valSampleWeight
 
 
@@ -339,7 +353,7 @@ class SwarmCallback(SwarmCallbackBase):
         otherwise go undetected because setattr() does not validate.
         '''
         model = self.mlCtx.model
-        is_list = self._weightConfig.get('is_list', False)
+        is_list_config = self._weightConfig.get('is_list', False)
 
         # --- Validate all expected keys are present ---
         for key in self.weightNames:
@@ -350,8 +364,14 @@ class SwarmCallback(SwarmCallbackBase):
                     % (key, self.weightNames, list(paramsDict.keys()))
                 )
 
-        if is_list:
-            for attr in self._weightConfig['weights']:
+        for attr in self._weightConfig['weights']:
+            local_val = getattr(model, attr, None)
+            is_attr_list = (
+                isinstance(local_val, list) or
+                any(k.startswith(attr + '_') for k in self.weightNames)
+            )
+
+            if is_attr_list:
                 # Reconstruct the list of arrays from the flat keys
                 keys = sorted(
                     [k for k in self.weightNames if k.startswith(attr + '_')],
@@ -359,7 +379,6 @@ class SwarmCallback(SwarmCallbackBase):
                 )
 
                 # Validate list length matches current model
-                local_val = getattr(model, attr, None)
                 if local_val is not None and isinstance(local_val, list):
                     if len(keys) != len(local_val):
                         self._logAndRaiseError(
@@ -394,12 +413,10 @@ class SwarmCallback(SwarmCallbackBase):
                     reconstructed.append(merged_arr)
 
                 setattr(model, attr, reconstructed)
-        else:
-            for attr in self._weightConfig['weights']:
+            else:
                 merged_arr = np.array(paramsDict[attr])
 
                 # Shape validation against local model
-                local_val = getattr(model, attr, None)
                 if local_val is not None:
                     local_shape = np.array(local_val).shape
                     if merged_arr.shape != local_shape:
@@ -522,12 +539,12 @@ class SwarmCallback(SwarmCallbackBase):
                         % (self.metricFunction, totalMetrics)
                     )
 
-        except Exception as emsg:
-            self._logAndRaiseError(
-                "Exception in method sklearn.py:"
-                "_calculateLocalLossAndMetrics, "
-                "error message - %s" % emsg
+        except Exception as exc:
+            self.logger.warning(
+                "Exception in _calculateLocalLossAndMetrics: %s. "
+                "Returning (0, 0) to allow training to continue." % exc
             )
+            return 0, 0
 
         return float(valLoss), float(totalMetrics)
 
@@ -548,9 +565,8 @@ class SwarmSklearnTrainer:
     A helper trainer class for Scikit-Learn to encapsulate the manual
     training loop and SwarmCallback hooks.
     """
-    def __init__(self, swarmCallback, model):
+    def __init__(self, swarmCallback, model=None):
         self.swarmCallback = swarmCallback
-        self.model = model
 
     def fit(self, x_train, y_train, batch_size=32, epochs=100, classes=None):
         self.swarmCallback.on_train_begin()
@@ -566,10 +582,15 @@ class SwarmSklearnTrainer:
                 x_batch = x_shuffled[start:end]
                 y_batch = y_shuffled[start:end]
 
-                if classes is not None:
-                    self.model.partial_fit(x_batch, y_batch, classes=classes)
+                model = self.swarmCallback.mlCtx.model
+                # Pass classes only on the very first partial_fit() call
+                # (epoch 0, first batch). Scikit-Learn classifiers only need
+                # the full label set once to allocate their internal arrays;
+                # repeating it every batch is wasteful for large label sets.
+                if classes is not None and epoch == 0 and start == 0:
+                    model.partial_fit(x_batch, y_batch, classes=classes)
                 else:
-                    self.model.partial_fit(x_batch, y_batch)
+                    model.partial_fit(x_batch, y_batch)
 
                 self.swarmCallback.on_batch_end()
 

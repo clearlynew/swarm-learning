@@ -1,17 +1,24 @@
-Credit card fraud detection
-===========================
+Credit card fraud detection (Scikit-Learn)
+==========================================
 
-This example runs a Credit Card Fraud Detection algorithm [1] on the Swarm Learning platform. It uses Scikit-Learn.
+This example runs a Credit Card Fraud Detection algorithm [1] on the Swarm Learning platform using Scikit-Learn.
 
 This example uses a subset of the data from [1] for each node. These subset datasets are biased with respect to the class and the volume of data.
 This example uses four training batches and one test batch. These files are located in the respective `examples/
-fraud-detection-skl/data-and-scratch<n>` directories.
->  **_NOTE :_** Refer [Data license](/examples/fraud-detection-skl/Data_license.md/) associated with this dataset. 
+fraud-detection/data-and-scratch<n>` directories.
+>  **_NOTE :_** Refer [Data license](/examples/fraud-detection/Data_license.md/) associated with this dataset. 
 
 
-The ML program, after conversion to Swarm Learning, is in `examples/fraud-detection-skl/model` and is called `fraud-detection.py`.
+The `model/` directory contains two ML programs that can be used interchangeably:
 
-This example shows the Swarm training of Credit Card Fraud Detection model using four Machine Learning (ML) nodes. Machine Learning nodes along with Swarm Learning (SL) nodes are automatically spawned by Swarm Operators (SWOP) nodes - all running on single host. Swarm training gets initiated by Swarm Command Interface (SWCI) node and orchestrated by one Swarm Network (SN) nodes running on the same host. This example also shows how private data, private scratch area and shared model can be mounted to Machine Learning nodes for Swarm training. For details, see the profile files and task definition files placed under `examples/fraud-detection-skl/swop` and `examples/fraud-detection-skl/swci` folders respectively.
+| Script | Description |
+|--------|-------------|
+| `fraud-detection-SGD.py` | **(Default)** Uses `sklearn.linear_model.SGDClassifier` — a built-in model registered in the Swarm weight registry. |
+| `fraud-detection-custom.py` | Uses a custom `OnlineLogisticRegression` model with non-standard weight attributes (`theta_`, `bias_`). Demonstrates the `weight_attrs` feature of `SwarmCallback` for models not in the built-in registry. |
+
+To switch between models, edit the `Command` field in `swci/taskdefs/swarm_fd_task.yaml`.
+
+This example shows the Swarm training of Credit Card Fraud Detection model using four Machine Learning (ML) nodes. Machine Learning nodes along with Swarm Learning (SL) nodes are automatically spawned by Swarm Operators (SWOP) nodes - all running on single host. Swarm training gets initiated by Swarm Command Interface (SWCI) node and orchestrated by one Swarm Network (SN) nodes running on the same host. This example also shows how private data, private scratch area and shared model can be mounted to Machine Learning nodes for Swarm training. For details, see the profile files and task definition files placed under `examples/fraud-detection/swop` and `examples/fraud-detection/swci` folders respectively.
 
 
 
@@ -40,17 +47,17 @@ The cluster setup for this example uses only one host, as shown in the figure be
    ```
 
 2. *On host-1*:  
-   Create a temporary `workspace` directory and copy `fraud-detection-skl` example and `gen-cert` utility there as follows.
+   Create a temporary `workspace` directory and copy `fraud-detection` example and `gen-cert` utility there as follows.
    ```
    mkdir workspace
-   cp -r examples/fraud-detection-skl workspace/
-   cp -r examples/utils/gen-cert workspace/fraud-detection-skl/
+   cp -r examples/fraud-detection workspace/
+   cp -r examples/utils/gen-cert workspace/fraud-detection/
    ```
 
 3. *On host-1*:  
    Run the `gen-cert` utility to generate certificates for each Swarm component using the command: `gen-cert -e <EXAMPLE-NAME> -i <HOST-INDEX>`  
    ```
-   ./workspace/fraud-detection-skl/gen-cert -e fraud-detection-skl -i 1
+   ./workspace/fraud-detection/gen-cert -e fraud-detection -i 1
    ```  
    
 4. *On host-1*:
@@ -71,13 +78,13 @@ The cluster setup for this example uses only one host, as shown in the figure be
 6. *On host-1*:  
    Search and replace all occurrences of placeholders and replace them with appropriate values.  
    ```
-   sed -i "s+<PROJECT-MODEL>+$(pwd)/workspace/fraud-detection-skl/model+g" workspace/fraud-detection-skl/swci/taskdefs/swarm_fd_task.yaml
+   sed -i "s+<PROJECT-MODEL>+$(pwd)/workspace/fraud-detection/model+g" workspace/fraud-detection/swci/taskdefs/swarm_fd_task.yaml
    
-   sed -i "s+<SWARM-NETWORK>+host-1-net+g" workspace/fraud-detection-skl/swop/swop*_profile.yaml
-   sed -i "s+<CURRENT-PATH>/examples+$(pwd)/workspace+g" workspace/fraud-detection-skl/swop/swop*_profile.yaml
-   sed -i "s+<LICENSE-SERVER-ADDRESS>+${APLS_IP}+g" workspace/fraud-detection-skl/swop/swop*_profile.yaml
-   sed -i "s+<PROJECT-CERTS>+$(pwd)/workspace/fraud-detection-skl/cert+g" workspace/fraud-detection-skl/swop/swop*_profile.yaml
-   sed -i "s+<PROJECT-CACERTS>+$(pwd)/workspace/fraud-detection-skl/cert/ca/capath+g" workspace/fraud-detection-skl/swop/swop*_profile.yaml
+   sed -i "s+<SWARM-NETWORK>+host-1-net+g" workspace/fraud-detection/swop/swop*_profile.yaml
+   sed -i "s+<CURRENT-PATH>/examples+$(pwd)/workspace+g" workspace/fraud-detection/swop/swop*_profile.yaml
+   sed -i "s+<LICENSE-SERVER-ADDRESS>+${APLS_IP}+g" workspace/fraud-detection/swop/swop*_profile.yaml
+   sed -i "s+<PROJECT-CERTS>+$(pwd)/workspace/fraud-detection/cert+g" workspace/fraud-detection/swop/swop*_profile.yaml
+   sed -i "s+<PROJECT-CACERTS>+$(pwd)/workspace/fraud-detection/cert/ca/capath+g" workspace/fraud-detection/swop/swop*_profile.yaml
    ```
 
 7. *On host-1*:  
@@ -94,8 +101,8 @@ The cluster setup for this example uses only one host, as shown in the figure be
    Run Swarm Network node (sn1) - sentinel node
    ```
    ./scripts/bin/run-sn -d --rm --name=sn1 --network=host-1-net --host-ip=${HOST_IP} --sentinel --sn-api-port=${SN_API_PORT}     \
-   --key=workspace/fraud-detection-skl/cert/sn-1-key.pem --cert=workspace/fraud-detection-skl/cert/sn-1-cert.pem                         \
-   --capath=workspace/fraud-detection-skl/cert/ca/capath --apls-ip=${APLS_IP}
+   --key=workspace/fraud-detection/cert/sn-1-key.pem --cert=workspace/fraud-detection/cert/sn-1-cert.pem                         \
+   --capath=workspace/fraud-detection/cert/ca/capath --apls-ip=${APLS_IP}
    ```
    Use the docker logs command to monitor the Sentinel SN node and wait for the node to finish initializing. The Sentinel node is ready when these messages appear in the log output:  
    `swarm.blCnt : INFO : Starting SWARM-API-SERVER on port: 30304`
@@ -103,25 +110,24 @@ The cluster setup for this example uses only one host, as shown in the figure be
 9. *On host-1*:  
    Run Swarm Operator node (swop1)  
 
-   Note: If required, modify proxy, according to environment, either in the below command or in the swop profile file under `workspace/fraud-detection-skl/swop` folder.  
+   Note: If required, modify proxy, according to environment, either in the below command or in the swop profile file under `workspace/fraud-detection/swop` folder.  
    ```
-   ./scripts/bin/run-swop -d --rm --name=swop1 --network=host-1-net --usr-dir=workspace/fraud-detection-skl/swop                                    \
-   --profile-file-name=swop1_profile.yaml --sn-ip=${SN_IP} --sn-api-port=${SN_API_PORT} --key=workspace/fraud-detection-skl/cert/swop-1-key.pem     \
-   --cert=workspace/fraud-detection-skl/cert/swop-1-cert.pem --capath=workspace/fraud-detection-skl/cert/ca/capath                                      \
+   ./scripts/bin/run-swop -d --rm --name=swop1 --network=host-1-net --usr-dir=workspace/fraud-detection/swop                                    \
+   --profile-file-name=swop1_profile.yaml --sn-ip=${SN_IP} --sn-api-port=${SN_API_PORT} --key=workspace/fraud-detection/cert/swop-1-key.pem     \
+   --cert=workspace/fraud-detection/cert/swop-1-cert.pem --capath=workspace/fraud-detection/cert/ca/capath                                      \
    -e http_proxy= -e https_proxy= --apls-ip=${APLS_IP}
    ```
 
 10. *On host-1*:  
     Run Swarm Command Interface node (swci1). It will create, finalize and assign below tasks to task-framework for sequential execution –  
-    - user_env_skl_build_task: Builds Scikit-Learn based docker image for ML node to run model training  
-      > **_NOTE:_** The base image `python@sha256:dad5b29e3506c35e0fd222736f4d4ef25d21b219acdd73f7bb41d59996ca8e0d` in the build task maps to a specific version of Scikit-Learn. This can be changed in the build task definition to use a different version if needed.
+    - user_env_tf_build_task: Builds Tensorflow based docker image for ML node to run model training  
     - swarm_fd_task: Create containers out of ML image and mount model and data path to run Swarm training  
 
-    Note: If required, modify SN IP, according to environment, in `workspace/fraud-detection-skl/swci/swci-init` file  
+    Note: If required, modify SN IP, according to environment, in `workspace/fraud-detection/swci/swci-init` file  
     ```    
-    ./scripts/bin/run-swci --rm --name=swci1 --network=host-1-net --usr-dir=workspace/fraud-detection-skl/swci         \
-    --init-script-name=swci-init --key=workspace/fraud-detection-skl/cert/swci-1-key.pem                               \
-    --cert=workspace/fraud-detection-skl/cert/swci-1-cert.pem --capath=workspace/fraud-detection-skl/cert/ca/capath        \
+    ./scripts/bin/run-swci --rm --name=swci1 --network=host-1-net --usr-dir=workspace/fraud-detection/swci         \
+    --init-script-name=swci-init --key=workspace/fraud-detection/cert/swci-1-key.pem                               \
+    --cert=workspace/fraud-detection/cert/swci-1-cert.pem --capath=workspace/fraud-detection/cert/ca/capath        \
     -e http_proxy= -e https_proxy= --apls-ip=${APLS_IP}
     ```
 
@@ -129,7 +135,7 @@ The cluster setup for this example uses only one host, as shown in the figure be
     Four node Swarm training will be automatically started when the run task (swarm_fd_task) gets assigned and executed. User can open a new terminal on host-1 and monitor the docker logs of ML nodes for Swarm training. Swarm training will end with the following log message at the end –  
     `SwarmCallback : INFO : All peers and Swarm training rounds finished. Final Swarm model was loaded.`  
     
-    Final Swarm model will be saved in each node specific scratch directory, which is `workspace/fraud-detection-skl/
+    Final Swarm model will be saved in each node specific scratch directory, which is `workspace/fraud-detection/
 data-and-scratch<n>/user<n>` directory. All the dynamically spawned SL and ML nodes will exit after Swarm training. The SN and SWOP nodes continue running.
 
 12. *On host-1*:  

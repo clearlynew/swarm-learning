@@ -31,9 +31,9 @@
 ##################################################################
 
 import os
+import sys
 import numpy as np
 import csv
-import logging
 import joblib
 
 from sklearn.linear_model import SGDClassifier
@@ -67,12 +67,15 @@ def main():
     minPeers = int(os.getenv('MIN_PEERS', str(defaultMinPeers)))
     os.makedirs(scratchDir, exist_ok=True)
 
-    print('***** Starting model =', modelName)
+    original_stdout = sys.stdout
+    original_stderr = sys.stderr
 
     log_file = os.path.join(scratchDir, "model_output.log")
-    import sys
-    sys.stdout = open(log_file, 'w', buffering=1)
-    sys.stderr = sys.stdout
+    log_f = open(log_file, 'w', buffering=1)
+    sys.stdout = log_f
+    sys.stderr = log_f
+
+    print('***** Starting model =', modelName)
 
     # ================== Load test and train Data =========================
     print('-' * 64)
@@ -151,6 +154,10 @@ def main():
     model_path = os.path.join(scratchDir, modelName + '.joblib')
     joblib.dump(model, model_path)
     print('Saved the trained model to', model_path)
+
+    sys.stdout = original_stdout
+    sys.stderr = original_stderr
+    log_f.close()
 
 
 if __name__ == '__main__':

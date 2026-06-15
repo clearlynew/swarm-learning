@@ -102,6 +102,11 @@ class OnlineLogisticRegression(BaseEstimator, ClassifierMixin):
             # Small random initialization to break symmetry
             self.theta_ = rng.randn(1, n_features).astype(np.float64) * 0.01
             self.bias_ = np.zeros(1, dtype=np.float64)
+            # Initialize a list of arrays representing extra model parameters to test 'is_list' support
+            self.extra_params_ = [
+                np.array([0.1, 0.2], dtype=np.float64),
+                np.array([0.3], dtype=np.float64)
+            ]
 
         # SGD update for each sample in the mini-batch
         for xi, yi in zip(X, y):
@@ -114,6 +119,9 @@ class OnlineLogisticRegression(BaseEstimator, ClassifierMixin):
             # Weight update
             self.theta_ -= self.learning_rate * error * xi
             self.bias_ -= self.learning_rate * error
+            # Update the custom list of arrays to ensure their values shift and synchronize
+            self.extra_params_[0] -= self.learning_rate * error * 0.1
+            self.extra_params_[1] -= self.learning_rate * error * 0.2
 
         return self
 
@@ -200,7 +208,7 @@ def main():
         random_state=42,
     )
     print("Model: OnlineLogisticRegression (custom) — Logistic Regression via SGD")
-    print("Weight attributes: ['theta_', 'bias_'] (registered via weight_attrs)")
+    print("Weight attributes: ['theta_', 'bias_', 'extra_params_'] (registered via weight_attrs)")
 
     # ================== Swarm Callback Setup ==============================
     # Use a small sample from training data for lazy weight initialization.
@@ -218,7 +226,9 @@ def main():
         # === KEY DIFFERENCE FROM BUILT-IN EXAMPLE ===
         # Register custom weight attributes explicitly since
         # OnlineLogisticRegression is not in _SKLEARN_WEIGHT_REGISTRY.
-        weight_attrs=['theta_', 'bias_'],
+        # Uses 'extra_params_' (list of arrays) and flags list serialization via 'weight_attrs_is_list'.
+        weight_attrs=['theta_', 'bias_', 'extra_params_'],
+        weight_attrs_is_list=True,
         lossFunction='log_loss',
         metricFunction='roc_auc_score',
     )

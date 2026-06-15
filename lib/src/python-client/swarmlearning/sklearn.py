@@ -241,7 +241,8 @@ class SwarmCallback(SwarmCallbackBase):
             # Allow user-supplied custom attribute list
             custom_attrs = params.get('weight_attrs', None)
             if custom_attrs:
-                self._weightConfig = {'weights': custom_attrs}
+                is_list = params.get('weight_attrs_is_list', False)
+                self._weightConfig = {'weights': custom_attrs, 'is_list': is_list}
             else:
                 self._logAndRaiseError(
                     "Model '%s' not found in weight registry and no "
@@ -340,7 +341,7 @@ class SwarmCallback(SwarmCallbackBase):
         otherwise go undetected because setattr() does not validate.
         '''
         model = self.mlCtx.model
-        is_list = self._weightConfig.get('is_list', False)
+        is_list_config = self._weightConfig.get('is_list', False)
 
         # --- Validate all expected keys are present ---
         for key in self.weightNames:
@@ -351,8 +352,14 @@ class SwarmCallback(SwarmCallbackBase):
                     % (key, self.weightNames, list(paramsDict.keys()))
                 )
 
-        if is_list:
-            for attr in self._weightConfig['weights']:
+        for attr in self._weightConfig['weights']:
+            local_val = getattr(model, attr, None)
+            is_attr_list = (
+                isinstance(local_val, list) or
+                any(k.startswith(attr + '_') for k in self.weightNames)
+            )
+
+            if is_attr_list:
                 # Reconstruct the list of arrays from the flat keys
                 keys = sorted(
                     [k for k in self.weightNames if k.startswith(attr + '_')],
@@ -360,7 +367,6 @@ class SwarmCallback(SwarmCallbackBase):
                 )
 
                 # Validate list length matches current model
-                local_val = getattr(model, attr, None)
                 if local_val is not None and isinstance(local_val, list):
                     if len(keys) != len(local_val):
                         self._logAndRaiseError(
@@ -395,12 +401,10 @@ class SwarmCallback(SwarmCallbackBase):
                     reconstructed.append(merged_arr)
 
                 setattr(model, attr, reconstructed)
-        else:
-            for attr in self._weightConfig['weights']:
+            else:
                 merged_arr = np.array(paramsDict[attr])
 
                 # Shape validation against local model
-                local_val = getattr(model, attr, None)
                 if local_val is not None:
                     local_shape = np.array(local_val).shape
                     if merged_arr.shape != local_shape:
@@ -549,9 +553,8 @@ class SwarmSklearnTrainer:
     A helper trainer class for Scikit-Learn to encapsulate the manual
     training loop and SwarmCallback hooks.
     """
-    def __init__(self, swarmCallback, model):
+    def __init__(self, swarmCallback, model=None):
         self.swarmCallback = swarmCallback
-        self.model = model
 
     def fit(self, x_train, y_train, batch_size=32, epochs=100, classes=None):
         self.swarmCallback.on_train_begin()
@@ -567,10 +570,11 @@ class SwarmSklearnTrainer:
                 x_batch = x_shuffled[start:end]
                 y_batch = y_shuffled[start:end]
 
+                model = self.swarmCallback.mlCtx.model
                 if classes is not None:
-                    self.model.partial_fit(x_batch, y_batch, classes=classes)
+                    model.partial_fit(x_batch, y_batch, classes=classes)
                 else:
-                    self.model.partial_fit(x_batch, y_batch)
+                    model.partial_fit(x_batch, y_batch)
 
                 self.swarmCallback.on_batch_end()
 

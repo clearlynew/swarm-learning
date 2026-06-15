@@ -8,8 +8,8 @@ This example runs a Credit Card Fraud Detection algorithm on the Swarm Learning 
 | Feature | `fraud-detection-skl` | `fraud-detection-skl-custom` |
 |---------|----------------------|------------------------------|
 | Model | `SGDClassifier` (built-in registry) | `OnlineLogisticRegression` (custom) |
-| Weight attributes | `coef_`, `intercept_` (auto-detected) | `theta_`, `bias_` (registered via `weight_attrs`) |
-| Registration | Automatic via `_SKLEARN_WEIGHT_REGISTRY` | Manual via `weight_attrs=['theta_', 'bias_']` |
+| Weight attributes | `coef_`, `intercept_` (auto-detected) | `theta_`, `bias_`, `extra_params_` (registered via `weight_attrs`) |
+| Registration | Automatic via `_SKLEARN_WEIGHT_REGISTRY` | Manual via `weight_attrs=['theta_', 'bias_', 'extra_params_']` and `weight_attrs_is_list=True` |
 
 ## Custom Model: `OnlineLogisticRegression`
 
@@ -17,15 +17,16 @@ The model in `model/fraud-detection.py` defines a custom `OnlineLogisticRegressi
 - Inherits from `sklearn.base.BaseEstimator` and `sklearn.base.ClassifierMixin`
 - Implements `partial_fit()` for online/incremental learning
 - Implements `predict()` and `predict_proba()` for evaluation
-- Stores weights as `theta_` (coefficients) and `bias_` (intercept) — **not** the standard sklearn names
+- Stores weights as `theta_` (coefficients), `bias_` (intercept), and `extra_params_` (list of arrays) — **not** the standard sklearn names
 
-This is integrated with Swarm Learning by passing `weight_attrs`:
+This is integrated with Swarm Learning by passing `weight_attrs` and `weight_attrs_is_list`:
 ```python
 swarmCallback = SwarmCallback(
     syncFrequency=128,
     minPeers=minPeers,
     model=model,
-    weight_attrs=['theta_', 'bias_'],   # <-- tells Swarm which attributes to sync
+    weight_attrs=['theta_', 'bias_', 'extra_params_'],   # <-- tells Swarm which attributes to sync
+    weight_attrs_is_list=True,                           # <-- signals custom list-of-arrays layout is present
     ...
 )
 ```

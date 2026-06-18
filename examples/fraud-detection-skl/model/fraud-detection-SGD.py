@@ -116,7 +116,9 @@ def main():
 
     # ================== Prepare data ======================================
     x_train, y_train = get_xy(trainData)
-    x_test, y_test = get_xy(testData)
+    x_test = testData[:, :-1]
+    y_test = testData[:, -1].astype(int)
+
 
     # ================== Model to train and evaluate =======================
     # SGDClassifier with loss='log_loss' is equivalent to logistic regression

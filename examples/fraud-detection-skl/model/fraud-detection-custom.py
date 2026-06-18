@@ -142,7 +142,7 @@ class OnlineLogisticRegression(BaseEstimator, ClassifierMixin):
 #  Data Loading                                                       #
 # ================================================================== #
 
-def getXY(dataSet):
+def get_xy(dataSet):
     """Shuffle dataset and split into features (X) and labels (y)."""
     np.random.shuffle(dataSet)
     length = np.size(dataSet, 0)
@@ -155,17 +155,18 @@ def getXY(dataSet):
 testFileName = 'SB19_CCFDUBL_TEST.csv'
 trainFileName = 'SB19_CCFDUBL_TRAIN.csv'
 
-batchSize = 32
-defaultMaxEpoch = 100
-defaultMinPeers = 2
+BATCH_SIZE = 32
+DEFAULT_MAX_EPOCHS = 100
+DEFAULT_MIN_PEERS = 2
+CLASSES = np.array([0, 1])
 
 
 def main():
     modelName = 'fraud-detection-skl-custom'
     dataDir = os.getenv('DATA_DIR', '/platform/data')
     scratchDir = os.getenv('SCRATCH_DIR', '/platform/scratch')
-    maxEpoch = int(os.getenv('MAX_EPOCHS', str(defaultMaxEpoch)))
-    minPeers = int(os.getenv('MIN_PEERS', str(defaultMinPeers)))
+    maxEpoch = int(os.getenv('MAX_EPOCHS', str(DEFAULT_MAX_EPOCHS)))
+    minPeers = int(os.getenv('MIN_PEERS', str(DEFAULT_MIN_PEERS)))
     os.makedirs(scratchDir, exist_ok=True)
 
     original_stdout = sys.stdout
@@ -199,8 +200,8 @@ def main():
     print('-' * 64)
 
     # ================== Prepare data ======================================
-    x_train, y_train = getXY(trainData)
-    x_test, y_test = getXY(testData)
+    x_train, y_train = get_xy(trainData)
+    x_test, y_test = get_xy(testData)
 
     # ================== Model to train and evaluate =======================
     # Use our custom OnlineLogisticRegression instead of SGDClassifier.
@@ -225,7 +226,7 @@ def main():
         totalEpochs=maxEpoch,
         model=model,
         initData=initSample,
-        classes=np.array([0, 1]),
+        classes=CLASSES,
         # === KEY DIFFERENCE FROM BUILT-IN EXAMPLE ===
         # Register custom weight attributes explicitly since
         # OnlineLogisticRegression is not in _SKLEARN_WEIGHT_REGISTRY.
@@ -239,12 +240,11 @@ def main():
     # ================== Training Loop via Trainer =========================
     print('Starting training with SwarmSklearnTrainer ...')
     trainer = SwarmSklearnTrainer(swarmCallback=swarmCallback, model=model)
-    trainer.fit(x_train, y_train, batch_size=batchSize, epochs=maxEpoch, classes=np.array([0, 1]))
+    trainer.fit(x_train, y_train, batch_size=BATCH_SIZE, epochs=maxEpoch, classes=CLASSES)
     print('Training done!')
 
     # ================== Evaluate ==========================================
     y_pred_proba = model.predict_proba(x_test)
-    y_pred = model.predict(x_test)
 
     finalLoss = log_loss(y_test, y_pred_proba)
     finalAuc = roc_auc_score(y_test, y_pred_proba[:, 1])

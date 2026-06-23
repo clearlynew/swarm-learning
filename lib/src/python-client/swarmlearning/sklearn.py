@@ -64,7 +64,6 @@ _SKLEARN_WEIGHT_REGISTRY = {
 # for sklearn where the same sklearn.metrics module serves both loss and
 # metric functions.
 _PROBA_METRICS = frozenset({
-    'accuracy_score',
     'log_loss',
     'roc_auc_score',
     'brier_score_loss',
@@ -286,7 +285,7 @@ class SwarmCallback(SwarmCallbackBase):
     # Note: This adaptive sync implementation is provided to fulfill the abstract
     # requirements of the SwarmCallbackBase class and maintain interface consistency
     # with other framework wrappers. Its functionality with Scikit-Learn has not yet
-    # been formally tested.
+    # been implimented and tested.
     def _getValidationDataForAdaptiveSync(self, valData, valBatchSize):
         '''
         Scikit-Learn specific implementation of abstract method

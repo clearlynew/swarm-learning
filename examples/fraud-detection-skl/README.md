@@ -12,10 +12,13 @@ The `model/` directory contains two ML programs that can be used interchangeably
 
 | Script | Description |
 |--------|-------------|
-| `fraud-detection-SGD.py` | **(Default)** Uses `sklearn.linear_model.SGDClassifier` — a built-in model registered in the Swarm weight registry. |
-| `fraud-detection-custom.py` | Uses a custom `OnlineLogisticRegression` model with non-standard weight attributes (`theta_`, `bias_`). Demonstrates the `weight_attrs` feature of `SwarmCallback` for models not in the built-in registry. |
+| [fraud-detection-SGD.py](/swarm-learning/examples/fraud-detection-skl/model/fraud-detection-SGD.py) | **(Default)** Uses `sklearn.linear_model.SGDClassifier` — a built-in model registered in the Swarm weight registry. |
+| [fraud-detection-custom.py](/swarm-learning/examples/fraud-detection-skl/model/fraud-detection-custom.py) | Uses a custom `OnlineLogisticRegression` model with non-standard weight attributes (`theta_`, `bias_`). Demonstrates the `weight_attrs` feature of `SwarmCallback` for models not in the built-in registry. |
 
-To switch between models, edit the `Command` field in `swci/taskdefs/swarm_fd_task.yaml`.
+> **_NOTE on Swarm Weight Registry :_** 
+> Unlike some frameworks such as Pytorch or Tensorflow, Scikit-Learn does not have a standard weight management API. Therefore, Swarm utilizes an internal Scikit-Learn weight registry mapping supported model classes to the attribute names of their trainable weights (such as `coef_` and `intercept_` for `SGDClassifier`). This registry, [_SKLEARN_WEIGHT_REGISTRY](/swarm-learning/lib/src/python-client/swarmlearning/sklearn.py#L52), is defined in [sklearn.py](/swarm-learning/lib/src/python-client/swarmlearning/sklearn.py). If a model is not in this built-in registry, the `weight_attrs` parameter of [SwarmCallback](/swarm-learning/lib/src/python-client/swarmlearning/sklearn.py#L83) must be used to specify the weight attribute names.
+
+To switch between models, edit the `Command` field in [swarm_fd_task.yaml](/swarm-learning/examples/fraud-detection-skl/swci/taskdefs/swarm_fd_task.yaml).
 
 This example shows the Swarm training of Credit Card Fraud Detection model using four Machine Learning (ML) nodes. Machine Learning nodes along with Swarm Learning (SL) nodes are automatically spawned by Swarm Operators (SWOP) nodes - all running on single host. Swarm training gets initiated by Swarm Command Interface (SWCI) node and orchestrated by one Swarm Network (SN) nodes running on the same host. This example also shows how private data, private scratch area and shared model can be mounted to Machine Learning nodes for Swarm training. For details, see the profile files and task definition files placed under `examples/fraud-detection-skl/swop` and `examples/fraud-detection-skl/swci` folders respectively.
 

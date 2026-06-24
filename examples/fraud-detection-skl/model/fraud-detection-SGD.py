@@ -21,13 +21,9 @@
 # (logistic regression) to match the original single-layer
 # Dense(1, activation='sigmoid') model.
 #
-# Integration uses Approach 1 (Direct Callback):
-#   1. Initialize model
-#   2. Create SwarmCallback with initData
-#   3. swCb.on_train_begin()   ← initial sync
-#   4. Manual batch loop with partial_fit + on_batch_end
-#   5. swCb.on_epoch_end()
-#   6. swCb.on_train_end()     ← final merge
+# This example uses one of the models in _SKLEARN_WEIGHT_REGISTRY
+# built-in to the Scikit-Learn Swarm client (sklearn.py). This is
+# the default way as explained in the README.md file.
 ##################################################################
 
 import os

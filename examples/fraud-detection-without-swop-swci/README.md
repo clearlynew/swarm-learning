@@ -68,7 +68,11 @@ mkdir -p ~/swarm-learning/workspace/fraud-detection-without-swop-swci/tmp/sl2
 chmod -R 777 ~/swarm-learning/workspace/fraud-detection-without-swop-swci/tmp
 ```
 
-### 7. Build ML Docker Image
+### 7. Copy .whl File and Build ML Docker Image
+```bash
+cp ~/swarm-learning/lib/swarmlearning-client-py3-none-manylinux_2_24_x86_64.whl \
+~/swarm-learning/workspace/fraud-detection-without-swop-swci/ml-context/
+```
 ```bash
 docker build -t fraud-ml-env ~/swarm-learning/workspace/fraud-detection-without-swop-swci/ml-context
 ```

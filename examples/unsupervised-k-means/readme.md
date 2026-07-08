@@ -82,14 +82,22 @@ You may need to specify the correct `https_proxy` for the Docker build if you ar
 ```
 docker build -t nsl-kdd-binary-env --build-arg https_proxy=http://<your-proxy-server-ip>:<port> workspace/nsl-kdd-binary/ml-context
 ```
+Set the following variables according to your environment:
+
+```bash
+HOST_1_IP=<host-ip-address>
+APLS_IP=${HOST_1_IP}
+SN_IP=${HOST_1_IP}
+SN_API_PORT=30304
+```
 
 6. Run the Swarm Network node (sentinel node).
 
 ```
-./scripts/bin/run-sn -d --rm --name=sn1 --host-ip=10.160.0.2 \
---sentinel --sn-api-port=30304 --key=workspace/nsl-kdd-binary/cert/sn-1-key.pem \
+./scripts/bin/run-sn -d --rm --name=sn1 --host-ip=${HOST_1_IP} \
+--sentinel --sn-api-port=${SN_API_PORT} --key=workspace/nsl-kdd-binary/cert/sn-1-key.pem \
 --cert=workspace/nsl-kdd-binary/cert/sn-1-cert.pem \
---capath=workspace/nsl-kdd-binary/cert/ca/capath --apls-ip=10.160.0.2
+--capath=workspace/nsl-kdd-binary/cert/ca/capath --apls-ip=${APLS_IP}
 ```
 
 Use the Docker logs command to monitor this sentinel SN node and wait for the node to finish initializing. The sentinel node is ready when this message appears in the log output:
@@ -101,8 +109,8 @@ swarm.blCnt : INFO : Starting SWARM-API-SERVER on port: 30304
 7. Run Swarm Learning node 1 and Machine Learning node 1 (as a side-car). Set the proxy server as appropriate.
 
 ```
-./scripts/bin/run-sl --name=sl1 --host-ip=10.160.0.2 \
---sn-ip=10.160.0.2 --sn-api-port=30304 --sl-fs-port=16000 \
+./scripts/bin/run-sl --name=sl1 --host-ip=${HOST_1_IP} \
+--sn-ip=${SN_IP} --sn-api-port=${SN_API_PORT} --sl-fs-port=16000 \
 --key=workspace/nsl-kdd-binary/cert/sl-1-key.pem \
 --cert=workspace/nsl-kdd-binary/cert/sl-1-cert.pem \
 --capath=workspace/nsl-kdd-binary/cert/ca/capath \
@@ -115,14 +123,14 @@ swarm.blCnt : INFO : Starting SWARM-API-SERVER on port: 30304
 --ml-e DATA_DIR=/tmp/nsl-kdd/data --ml-e MODEL_DIR=/tmp/nsl-kdd/model_out \
 --ml-e MAX_EPOCHS=50 --ml-e MIN_PEERS=3 \
 --ml-e https_proxy=http://<your-proxy-server-ip>:<port-number> \
---apls-ip=10.160.0.2
+--apls-ip=${APLS_IP}
 ```
 
 8. Run Swarm Learning node 2 and Machine Learning node 2 (as a side-car). Set the proxy server as appropriate.
 
 ```
-./scripts/bin/run-sl --name=sl2 --host-ip=10.160.0.2 \
---sn-ip=10.160.0.2 --sn-api-port=30304 --sl-fs-port=17000 \
+./scripts/bin/run-sl --name=sl2 --host-ip=${HOST_1_IP} \
+--sn-ip=${SN_IP} --sn-api-port=${SN_API_PORT} --sl-fs-port=17000 \
 --key=workspace/nsl-kdd-binary/cert/sl-2-key.pem \
 --cert=workspace/nsl-kdd-binary/cert/sl-2-cert.pem \
 --capath=workspace/nsl-kdd-binary/cert/ca/capath \
@@ -135,14 +143,14 @@ swarm.blCnt : INFO : Starting SWARM-API-SERVER on port: 30304
 --ml-e DATA_DIR=/tmp/nsl-kdd/data --ml-e MODEL_DIR=/tmp/nsl-kdd/model_out \
 --ml-e MAX_EPOCHS=50 --ml-e MIN_PEERS=3 \
 --ml-e https_proxy=http://<your-proxy-server-ip>:<port-number> \
---apls-ip=10.160.0.2
+--apls-ip=${APLS_IP}
 ```
 
 9. Run Swarm Learning node 3 and Machine Learning node 3 (as a side-car). Set the proxy server as appropriate.
 
 ```
-./scripts/bin/run-sl --name=sl3 --host-ip=10.160.0.2 \
---sn-ip=10.160.0.2 --sn-api-port=30304 --sl-fs-port=18000 \
+./scripts/bin/run-sl --name=sl3 --host-ip=${HOST_1_IP} \
+--sn-ip=${SN_IP} --sn-api-port=${SN_API_PORT} --sl-fs-port=18000 \
 --key=workspace/nsl-kdd-binary/cert/sl-3-key.pem \
 --cert=workspace/nsl-kdd-binary/cert/sl-3-cert.pem \
 --capath=workspace/nsl-kdd-binary/cert/ca/capath \
@@ -155,7 +163,7 @@ swarm.blCnt : INFO : Starting SWARM-API-SERVER on port: 30304
 --ml-e DATA_DIR=/tmp/nsl-kdd/data --ml-e MODEL_DIR=/tmp/nsl-kdd/model_out \
 --ml-e MAX_EPOCHS=50 --ml-e MIN_PEERS=3 \
 --ml-e https_proxy=http://<your-proxy-server-ip>:<port-number> \
---apls-ip=10.160.0.2
+--apls-ip=${APLS_IP}
 ```
 
 10. Three nodes of Swarm training are now started. Monitor the Docker logs of the ML nodes (`ml1`, `ml2`, `ml3` containers) for Swarm training progress:

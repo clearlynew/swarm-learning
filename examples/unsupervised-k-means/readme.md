@@ -214,5 +214,6 @@ To clean up, run the `scripts/bin/stop-swarm` script to stop and remove the cont
 ## References
 
 - Xie, J., Girshick, R., & Farhadi, A. (2016). **Unsupervised Deep Embedding for Clustering Analysis.** *Proceedings of the 33rd International Conference on Machine Learning (ICML).* https://arxiv.org/abs/1511.06335
+- Maziar M. Fard. **Deep k-Means Reference Implementation (GitHub).** https://github.com/MaziarMF/deep-k-means
 
 - NSL-KDD Dataset: Tavallaee, M., Bagheri, E., Lu, W., & Ghorbani, A. (2009). **A Detailed Analysis of the KDD CUP 99 Data Set.** *IEEE Symposium on Computational Intelligence for Security and Defense Applications (CISDA).* https://www.unb.ca/cic/datasets/nsl.html
